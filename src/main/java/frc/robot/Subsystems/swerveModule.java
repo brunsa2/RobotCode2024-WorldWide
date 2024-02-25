@@ -9,6 +9,7 @@ import edu.wpi.first.math.controller.PIDController;
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.kinematics.SwerveModulePosition;
 import edu.wpi.first.math.kinematics.SwerveModuleState;
+import edu.wpi.first.math.proto.Controller;
 import edu.wpi.first.math.util.Units;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
 import frc.robot.Constants;
@@ -24,7 +25,7 @@ public class swerveModule extends SubsystemBase{
     CANcoder moduleEncoder;
     double encoderOffsetRotations;
 
-    double WHEEL_DIAMETER = Units.inchesToMeters(3);
+    double WHEEL_DIAMETER = Units.inchesToMeters(4);
     double WHEEL_CIRCUMFERENCE = WHEEL_DIAMETER * Math.PI;
     double GEAR_RATIO = 1.0 / 6.75;
     double DRIVE_POSITION_CONVERSION = WHEEL_CIRCUMFERENCE * GEAR_RATIO;
@@ -33,7 +34,8 @@ public class swerveModule extends SubsystemBase{
     double STEER_POSITION_CONVERSION = 1;
     double STEER_VELOCITY_CONVERSION = STEER_POSITION_CONVERSION / 60.0;
 
-    public swerveModule(int driveMotorID, int steerMotorID, int encoderID, Double encoderOffsetdegrese){
+    public swerveModule(int driveMotorID, int steerMotorID, int encoderID, Double encoderOffsetRotations){
+        
         
         //drive motor 
         driveMotor = new CANSparkMax(driveMotorID, MotorType.kBrushless);
@@ -51,8 +53,11 @@ public class swerveModule extends SubsystemBase{
         steerController.enableContinuousInput(0, 1);
         
         // module encoder
-        moduleEncoder = new CANcoder(encoderID);
-        encoderOffsetRotations = encoderOffsetdegrese / 360;
+        moduleEncoder = new CANcoder(encoderID,"Default Name");
+
+        //setTargetState(new SwerveModuleState(3,new Rotation2d()));
+        
+        this.encoderOffsetRotations = encoderOffsetRotations;
         
     }
 
@@ -63,8 +68,8 @@ public class swerveModule extends SubsystemBase{
 
     @Override
     public void periodic(){
-        steerMotor.set(steerController.calculate(getModuleAngRotations()));
-        driveMotor.set(driveController.calculate(driveMotorEncoder.getVelocity()));
+        steerMotor.set(-steerController.calculate(getModuleAngRotations()));
+       driveMotor.set(driveController.getSetpoint() / 12);         
     }
 
     public SwerveModulePosition getModulePosition() {
@@ -75,13 +80,14 @@ public class swerveModule extends SubsystemBase{
     }
 
     public double getModuleAngRotations(){
-        return moduleEncoder.getAbsolutePosition().getValue() - encoderOffsetRotations;
+        return moduleEncoder.getAbsolutePosition().getValueAsDouble() - encoderOffsetRotations;
     }
+    
 
     public SwerveModuleState getSwerveModuleState() {
         return new SwerveModuleState(
             driveMotorEncoder.getVelocity(), 
-            Rotation2d.fromRotations(steerMotorEncoder.getPosition()-encoderOffsetRotations));
+            Rotation2d.fromRotations(getModuleAngRotations()));
     }
     
 }

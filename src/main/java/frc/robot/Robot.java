@@ -4,15 +4,26 @@
 
 package frc.robot;
 
-import com.revrobotics.CANSparkLowLevel.MotorType;
-import com.revrobotics.CANSparkMax;
+import javax.lang.model.util.ElementScanner14;
 
+import com.revrobotics.CANSparkMax;
+import com.revrobotics.CANSparkLowLevel.MotorType;
+
+import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.kinematics.ChassisSpeeds;
+import edu.wpi.first.math.kinematics.SwerveModuleState;
+import edu.wpi.first.wpilibj.Compressor;
+import edu.wpi.first.wpilibj.DoubleSolenoid;
+import edu.wpi.first.wpilibj.PneumaticHub;
+import edu.wpi.first.wpilibj.PneumaticsControlModule;
+import edu.wpi.first.wpilibj.PneumaticsModuleType;
 import edu.wpi.first.wpilibj.TimedRobot;
 import edu.wpi.first.wpilibj.XboxController;
+import edu.wpi.first.wpilibj.DoubleSolenoid.Value;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.CommandScheduler;
 import frc.robot.Subsystems.DrivetrainSubsystem;
+
 
 public class Robot extends TimedRobot {
   private Command m_autonomousCommand;
@@ -20,13 +31,25 @@ public class Robot extends TimedRobot {
   private RobotContainer m_robotContainer;
 
   XboxController driveController = new XboxController(0);
-  //XboxController coDriverController = new XboxController(1);
+  XboxController coDriverController = new XboxController(1);
 
-  CANSparkMax testMotor = new CANSparkMax(15, MotorType.kBrushless);
+  //crap code//
+  CANSparkMax AngMotor = new CANSparkMax(Constants.Intake.AngMotorID, MotorType.kBrushless);
+  CANSparkMax WheelMotor = new CANSparkMax(Constants.Intake.ShootMotorID, MotorType.kBrushless);
+  boolean shooting = false;
+  CANSparkMax shooter1 = new CANSparkMax(Constants.Shooter.aID, MotorType.kBrushless);
+  CANSparkMax shooter2 = new CANSparkMax(Constants.Shooter.bID, MotorType.kBrushless);
+
+  PneumaticsControlModule PCM = new PneumaticsControlModule();
+  DoubleSolenoid solenoid;
+  //crap code//
 
   @Override
   public void robotInit() {
     m_robotContainer = new RobotContainer();
+
+    PCM.enableCompressorDigital();
+    solenoid = PCM.makeDoubleSolenoid(1, 0);
   }
 
   @Override
@@ -68,19 +91,52 @@ public class Robot extends TimedRobot {
   @Override
   public void teleopPeriodic() {
 
-    //DrivetrainSubsystem.getInstance().drive(new ChassisSpeeds(
-    //    driveController.getLeftX() * Constants.attainableMaxTranslationalSpeedMPS, 
-    //    driveController.getLeftY() * Constants.attainableMaxTranslationalSpeedMPS, 
-    //    driveController.getRightX() * Constants.attainableMaxRotationalVelocityRPS)
-    //);  
 
+    //TODO proper velocity controll/current controll, "shooting mode" stop all motors while shooting, max acc, drive auton, intake auton, genralize swerve code
+    if(driveController.getXButton())
+      {solenoid.set(Value.kReverse);}    
+    if(driveController.getAButton())
+      {solenoid.set(Value.kForward);}
+
+
+    if(driveController.getLeftBumper()){AngMotor.set(0.5);}
+    if(driveController.getRightBumper()){AngMotor.set(-0.5);}
+    if(!driveController.getLeftBumper() && !driveController.getRightBumper()) {AngMotor.set(0);}
+
+    if(driveController.getLeftTriggerAxis() > 0.1){WheelMotor.set(0.5);}else
+    if(driveController.getRightTriggerAxis() > 0.1){WheelMotor.set(-0.5);}else 
+    {WheelMotor.set(0);}
+    
+    if(driveController.getYButtonPressed()){shooting=!shooting;}
+    
+    shooter1.set(shooting?-1:0);
+    shooter2.set(shooting?1:0);
+
+    double x = driveController.getLeftX();
+    double y = driveController.getLeftY();
+    double rx = driveController.getRightX();
+
+    if(Math.hypot(x,y) < Constants.controllerDeadband){ //FIXME deadband removed
+        x = 0.0;
+        y = 0.0;
+    }
+
+    if(Math.abs(rx) < Constants.controllerDeadband){
+      rx = 0.0;
+    } 
+
+    DrivetrainSubsystem.getInstance().driveFieldRelative(new ChassisSpeeds(
+        y * Constants.attainableMaxTranslationalSpeedMPS, 
+        x * Constants.attainableMaxTranslationalSpeedMPS, 
+        rx * Constants.attainableMaxRotationalVelocityRPS)
+        );  
+
+    
     //DrivetrainSubsystem.getInstance().drive(new ChassisSpeeds(
     //    0.5,
     //    0,
     //    0)
     //);  
-
-    testMotor.set( driveController.getLeftX()/2 );
   
   }
 
