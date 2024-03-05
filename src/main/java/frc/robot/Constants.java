@@ -15,7 +15,7 @@ public class Constants {
     
     //velocity constranints for swerve desaturate
     public static final double DriveBaseRadius = 0.42207203769;
-    public static final double attainableMaxModuleSpeedMPS = 9;
+    public static final double attainableMaxModuleSpeedMPS = 4.572;
     public static final double attainableMaxTranslationalSpeedMPS = attainableMaxModuleSpeedMPS;
     public static final double attainableMaxRotationalVelocityRPS = attainableMaxModuleSpeedMPS/DriveBaseRadius;
 
@@ -24,7 +24,7 @@ public class Constants {
     public static double controllerDeadband = 0.15; 
 
     public interface Modules{
-            public static final double SpeedKP = 2, SpeedKI = 0, SpeedKD = 0;
+            public static final double SpeedKP = 0.001, SpeedKI = 0, SpeedKD = 0.0005;
             public static final double SteerKP = 1.5, SteerKI = 0, SteerKD = 0;
         
             public static final int FrontLeftDriveID   = 4, FrontLeftSteerID   = 5, FrontLeftEncoderID = 6;

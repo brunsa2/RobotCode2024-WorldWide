@@ -4,15 +4,18 @@
 
 package frc.robot;
 
+import edu.wpi.first.math.kinematics.ChassisSpeeds;
+import edu.wpi.first.wpilibj.smartdashboard.SendableChooser;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.Commands;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
 import edu.wpi.first.wpilibj2.command.button.Trigger;
-import frc.robot.Commands.IntakeSetAng;
-import frc.robot.Commands.IntakeSetSpeed;
-import frc.robot.Subsystems.IntakeSubsystem;
+import frc.robot.Subsystems.DrivetrainSubsystem;
 
 public class RobotContainer {
+
+  SendableChooser<Command> m_chooser = new SendableChooser<>();
+
 
   CommandXboxController DriveController = new CommandXboxController(0);
   //CommandXboxController coDriveController = new CommandXboxController(1);
@@ -27,6 +30,9 @@ public class RobotContainer {
 
   public RobotContainer() {
     configureBindings();
+    //m_chooser.setDefaultOption("taxi", taxi);
+    //m_chooser.addOption("shoot", shoot);
+    //m_chooser.addOption("shoot and taxi", shoot.andThen(taxi));
   }
 
   private void configureBindings() {
@@ -47,6 +53,6 @@ public class RobotContainer {
 }
 
   public Command getAutonomousCommand() {
-    return Commands.print("No autonomous command configured");
+    return m_chooser.getSelected();
   }
 }
