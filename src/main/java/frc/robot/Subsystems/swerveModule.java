@@ -45,7 +45,7 @@ public class swerveModule extends SubsystemBase{
             //drive motor 
             driveMotor = new CANSparkMax(driveMotorID, MotorType.kBrushless);
             driveMotor.restoreFactoryDefaults();
-            driveMotor.setIdleMode(IdleMode.kCoast);
+            driveMotor.setIdleMode(IdleMode.kBrake);
             driveMotor.setSmartCurrentLimit(40);
             driveMotor.burnFlash();
             //drive encoder

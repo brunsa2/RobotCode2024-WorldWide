@@ -7,25 +7,35 @@ package frc.robot;
 import javax.lang.model.util.ElementScanner14;
 
 import com.revrobotics.CANSparkMax;
+import com.revrobotics.RelativeEncoder;
+import com.revrobotics.SparkAbsoluteEncoder;
 import com.revrobotics.CANSparkBase.IdleMode;
 import com.revrobotics.CANSparkLowLevel.MotorType;
 
+import edu.wpi.first.math.controller.PIDController;
+import edu.wpi.first.math.filter.MedianFilter;
+import edu.wpi.first.math.filter.SlewRateLimiter;
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.kinematics.ChassisSpeeds;
 import edu.wpi.first.math.kinematics.SwerveModuleState;
+import edu.wpi.first.networktables.NetworkTable;
 import edu.wpi.first.wpilibj.Compressor;
 import edu.wpi.first.wpilibj.DoubleSolenoid;
 import edu.wpi.first.wpilibj.PneumaticHub;
 import edu.wpi.first.wpilibj.PneumaticsControlModule;
 import edu.wpi.first.wpilibj.PneumaticsModuleType;
 import edu.wpi.first.wpilibj.TimedRobot;
+import edu.wpi.first.wpilibj.Ultrasonic;
 import edu.wpi.first.wpilibj.XboxController;
 import edu.wpi.first.wpilibj.DoubleSolenoid.Value;
 import edu.wpi.first.wpilibj.GenericHID.RumbleType;
 import edu.wpi.first.wpilibj.simulation.DifferentialDrivetrainSim.KitbotGearing;
+import edu.wpi.first.wpilibj.smartdashboard.Field2d;
+import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.CommandScheduler;
 import edu.wpi.first.wpilibj2.command.Commands;
+import edu.wpi.first.wpilibj2.command.PIDCommand;
 import frc.robot.Subsystems.DrivetrainSubsystem;
 import edu.wpi.first.cameraserver.CameraServer;
 
@@ -39,19 +49,39 @@ public class Robot extends TimedRobot {
   XboxController coDriverController = new XboxController(1);
 
   //crap code//
+  //ang motor
   CANSparkMax AngMotor = new CANSparkMax(Constants.Intake.AngMotorID, MotorType.kBrushless);
+  RelativeEncoder angEncoder;
+  double angEncoderOffset = 0.03;
+  PIDController angController = new PIDController(1.5,0 ,0);
+  SlewRateLimiter angLimiter = new SlewRateLimiter(2);
+  boolean intakeAutoControl = false;
+  //wheel motor
   CANSparkMax WheelMotor = new CANSparkMax(Constants.Intake.ShootMotorID, MotorType.kBrushless);
   boolean shooting = false;
   boolean intaking = false;
+  double ampShootSpeed = -0.7;
+  double speakerShootSpeed = -1;
+  double retractedSetpoint = 0.01318359375;
+  double ampSetpoint = -0.5;
+  double extendedSetpoint = -1.103515625;
+  double intakerotationspeed = 0.2;
+  //drive
+  boolean slow = false;
+  boolean stop = false;
+  //shooter
   CANSparkMax shooter1 = new CANSparkMax(Constants.Shooter.aID, MotorType.kBrushless);
   CANSparkMax shooter2 = new CANSparkMax(Constants.Shooter.bID, MotorType.kBrushless);
   public void setShooterSpeed(double speed){shooter1.set(-speed);shooter2.set(speed);}
-
+  //pneumatics
   PneumaticsControlModule PCM = new PneumaticsControlModule();
   DoubleSolenoid solenoid;
   
-  public Command shoot = Commands.runOnce(()->{setShooterSpeed(1.0);}).andThen(Commands.waitSeconds(1)).andThen(Commands.runOnce(()->{WheelMotor.set(1);})).andThen(Commands.waitSeconds(1)).andThen(Commands.runOnce(()->{WheelMotor.set(0);setShooterSpeed(0);}));
+  public Command shoot = Commands.runOnce(()->{setShooterSpeed(1.0);}).andThen(Commands.waitSeconds(1)).andThen(Commands.runOnce(()->{WheelMotor.set(-1);})).andThen(Commands.waitSeconds(1)).andThen(Commands.runOnce(()->{WheelMotor.set(0);setShooterSpeed(0);}));
   public Command taxi = Commands.runOnce(()->{DrivetrainSubsystem.getInstance().driveFieldRelative(new ChassisSpeeds(-2,0,0));}).andThen(Commands.waitSeconds(4)).andThen(()->{DrivetrainSubsystem.getInstance().driveFieldRelative(new ChassisSpeeds());});
+  //public Command donothing = Commands.runOnce(()->{setShooterSpeed(0);}).andThen(Commands.waitSeconds(15));
+  double translationPow = 3;
+  double rotationPow = 3;
   //crap code//
 
   @Override
@@ -59,7 +89,7 @@ public class Robot extends TimedRobot {
     m_robotContainer = new RobotContainer();
 
     //camera//
-    //CameraServer.startAutomaticCapture();
+    CameraServer.startAutomaticCapture();
 
     PCM.enableCompressorDigital();
     solenoid = PCM.makeDoubleSolenoid(1, 0);
@@ -69,6 +99,7 @@ public class Robot extends TimedRobot {
     AngMotor.setIdleMode(IdleMode.kBrake);
     AngMotor.setSmartCurrentLimit(40);
     AngMotor.burnFlash();
+    angEncoder = AngMotor.getAlternateEncoder(8192);
     WheelMotor.restoreFactoryDefaults();
     WheelMotor.setIdleMode(IdleMode.kCoast);
     WheelMotor.setSmartCurrentLimit(40);
@@ -81,10 +112,31 @@ public class Robot extends TimedRobot {
     shooter2.setIdleMode(IdleMode.kCoast);
     shooter2.setSmartCurrentLimit(40);
     shooter2.burnFlash();
+
+    angController.setSetpoint(0.01318359375);
+
+    // Initialize here to retrieve the details regarding the gyroscope.
+    // Do not use to ensure that any changes to behavior of the subsystem are unobserved and do not
+    // impact the driving and autonomous of the robot.
+    DrivetrainSubsystem.getInstance().resetGyro();
+
+    SmartDashboard.putNumber("translationPow", translationPow);
+    SmartDashboard.putNumber("rotationPow", rotationPow);
+    SmartDashboard.putNumber("amp shoot speed", ampShootSpeed);
+    SmartDashboard.putNumber("speaker shoot speed", speakerShootSpeed);
+    SmartDashboard.putNumber("retracted Setpoint", retractedSetpoint);
+    SmartDashboard.putNumber("amp Setpoint", ampSetpoint);
+    SmartDashboard.putNumber("extended Setpoint", extendedSetpoint);
+    SmartDashboard.putNumber("intake rotation speed", intakerotationspeed);
+    //SmartDashboard.putNumber("gyro", DrivetrainSubsystem.getInstance().getgy())
+
   }
 
   @Override
   public void robotPeriodic() {
+
+    SmartDashboard.putNumber("encoder Position", angEncoder.getPosition());
+
     CommandScheduler.getInstance().run();
   }
 
@@ -99,8 +151,8 @@ public class Robot extends TimedRobot {
 
   @Override
   public void autonomousInit() {
-    m_autonomousCommand = taxi;
-    //m_robotContainer.getAutonomousCommand();
+    m_autonomousCommand = shoot;
+    m_robotContainer.getAutonomousCommand();
 
     if (m_autonomousCommand != null) {
       m_autonomousCommand.schedule();
@@ -123,39 +175,7 @@ public class Robot extends TimedRobot {
   @Override
   public void teleopPeriodic() {
 
-
-    //TODO proper velocity controll/current controll, "shooting mode" stop all motors while shooting, max acc, drive auton, intake auton, genralize swerve code
-    
-    //climber
-    if(driveController.getXButtonPressed()){solenoid.set(Value.kReverse);}    
-    if(driveController.getAButtonPressed()){solenoid.set(Value.kForward);}
-    //intake
-    AngMotor.set(coDriverController.getLeftBumper()?0.5:coDriverController.getRightBumper()?-0.5:0);
-    WheelMotor.set(coDriverController.getLeftTriggerAxis() > 0.1?0.5:coDriverController.getRightTriggerAxis() > 0.1?-0.5:0);
-    WheelMotor.set((coDriverController.getLeftTriggerAxis() * 0.3)+(-coDriverController.getRightTriggerAxis()));
-
-    //shooter
-    if(coDriverController.getYButtonPressed()){shooting=!shooting;intaking=false;}    
-    if(coDriverController.getBButtonPressed()){intaking=!intaking;shooting=false;}
-    setShooterSpeed(shooting?1:intaking?-0.1 :0.3);
-    coDriverController.setRumble(RumbleType.kBothRumble, shooting?1:0);
-    //coDriverController.setRumble(RumbleType.kRightRumble, intaking?0.5:1);
-
-    //drive
-    if(driveController.getStartButtonPressed()){
-      DrivetrainSubsystem.getInstance().resetGyro();
-    }
-
-
-    double x = driveController.getLeftX(),y = driveController.getLeftY(),theta = driveController.getRightX();
-    if(Math.hypot(x,y) < Constants.controllerDeadband){x = 0.0; y = 0.0;}
-    if(Math.abs(theta) < Constants.controllerDeadband){theta = 0.0;} 
-
-    DrivetrainSubsystem.getInstance().driveFieldRelative(new ChassisSpeeds(
-        y * Constants.attainableMaxTranslationalSpeedMPS, 
-        x * Constants.attainableMaxTranslationalSpeedMPS, 
-        theta * Constants.attainableMaxRotationalVelocityRPS)
-    );
+    driveRobot();
   
   }
 
@@ -168,8 +188,116 @@ public class Robot extends TimedRobot {
   }
 
   @Override
-  public void testPeriodic() {}
+  public void testPeriodic() {
+
+    translationPow = SmartDashboard.getNumber("translationPow", translationPow);
+    rotationPow = SmartDashboard.getNumber("translationPow", rotationPow);
+    ampShootSpeed = SmartDashboard.getNumber("amp shoot speed", ampShootSpeed);
+    speakerShootSpeed = SmartDashboard.getNumber("speaker shoot speed", speakerShootSpeed);
+    SmartDashboard.getNumber("", ampShootSpeed);
+    retractedSetpoint = SmartDashboard.getNumber("retracted Setpoint", retractedSetpoint);
+    ampSetpoint = SmartDashboard.getNumber("amp Setpoint", ampSetpoint);
+    extendedSetpoint = SmartDashboard.getNumber("extended Setpoint", extendedSetpoint);
+    intakerotationspeed = SmartDashboard.getNumber("intake rotation speed", intakerotationspeed);
+    driveRobot();
+
+  }
 
   @Override
   public void testExit() {}
+
+
+  public void driveRobot(){
+
+    //climber
+      if(driveController.getXButtonPressed()){
+        solenoid.set(Value.kReverse);
+      }else if(driveController.getAButtonPressed()){
+        solenoid.set(Value.kForward);
+      }
+    //intake
+      boolean coDriverLeftBumber = coDriverController.getLeftBumper();
+      boolean coDriverRightBumber = coDriverController.getRightBumper();
+
+      double encoderAng = angEncoder.getPosition();
+
+      if(coDriverLeftBumber || coDriverRightBumber){
+        intakeAutoControl = false;
+      }
+
+      if(coDriverController.getAButtonPressed()){//retracted
+        angController.setSetpoint(retractedSetpoint);
+        intakeAutoControl = true;
+      }else if(coDriverController.getLeftStickButtonPressed()){//amp
+        angController.setSetpoint(ampSetpoint);          
+        intakeAutoControl = true;
+      }else if(coDriverController.getXButtonPressed()){//extended
+        angController.setSetpoint(extendedSetpoint);          
+        intakeAutoControl = true;
+      }    
+      
+      if(intakeAutoControl){
+        AngMotor.set(angLimiter.calculate(angController.calculate(encoderAng)));
+      }else{
+        if (coDriverLeftBumber) {
+          AngMotor.set(-intakerotationspeed);
+        }else if (coDriverRightBumber) {
+          AngMotor.set(intakerotationspeed);
+        }else{
+          AngMotor.set(0);
+        }
+      }
+    //intake wheel motor
+      if(coDriverController.getRightTriggerAxis() > 0.5){
+        if(encoderAng < -0.2 && encoderAng > -0.8){
+          WheelMotor.set(ampShootSpeed);
+        }else{
+          WheelMotor.set(speakerShootSpeed);
+        }
+      }else{
+        WheelMotor.set(coDriverController.getLeftTriggerAxis() * 0.5);
+      }
+
+    //shooter
+      if(coDriverController.getYButtonPressed()){
+        shooting=!shooting;
+        intaking=false;
+      }    
+      if(coDriverController.getBButtonPressed()){
+        intaking=!intaking;
+        shooting=false;
+      }
+      setShooterSpeed(shooting?1:intaking?-0.2 :0.3);
+      coDriverController.setRumble(RumbleType.kBothRumble, shooting?1:intaking?0.05:0);
+
+    //gyro reset
+      if(driveController.getStartButtonPressed()){
+        DrivetrainSubsystem.getInstance().resetGyro();
+      }
+
+    //drive
+      double x = driveController.getLeftX(),y = driveController.getLeftY(),theta = driveController.getRightX();
+      
+      if(Math.hypot(x, y) < Constants.controllerDeadband){x = 0; y = 0;}
+      if(Math.abs(theta) < Constants.controllerDeadband){theta = 0.0;} 
+
+      x = (x > 0)? Math.abs(Math.pow(x,translationPow)) : -Math.abs(Math.pow(x,translationPow));
+      y = (y > 0)? Math.abs(Math.pow(y,translationPow)) : -Math.abs(Math.pow(y,translationPow));
+      theta = (theta>0)? Math.abs(Math.pow(theta,rotationPow)) : -Math.abs(Math.pow(theta,rotationPow));
+
+      slow = driveController.getLeftBumper();
+      //if(slow){DrivetrainSubsystem.getInstance().driveFieldRelative(new ChassisSpeeds(
+      //  y * Constants.attainableMaxTranslationalSpeedMPS * 0.25, 
+      //  x * Constants.attainableMaxTranslationalSpeedMPS * 0.25, 
+      //  theta * Constants.attainableMaxRotationalVelocityRPS * 0.25));}
+
+      double slowModeFactor = (driveController.getLeftTriggerAxis()*3)+1;
+
+      DrivetrainSubsystem.getInstance().driveFieldRelative(new ChassisSpeeds(
+        (y * Constants.attainableMaxTranslationalSpeedMPS) / slowModeFactor, 
+        (x * Constants.attainableMaxTranslationalSpeedMPS) / slowModeFactor, 
+        (theta * Constants.attainableMaxRotationalVelocityRPS) / slowModeFactor)
+      );
+  }
+
 }
