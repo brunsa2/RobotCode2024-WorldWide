@@ -41,39 +41,6 @@ public class Constants {
         
     }
 
-    public interface Intake{
-
-        public static final double IntakeSpeed = 0;
-        public static final double SpeakerSpeed = 0;
-        public static final double AmpSpeed = 0;
-
-
-        public static final int AngMotorID = 16, ShootMotorID = 15, PingChannel = 0, EchoChannel = 1;
-
-        public static final double ControllerTolerance = 1;//degrees 
-        public static final double ControllerKP = 0.02, ControllerKI = 0, ControllerKD = 0;
-
-        public static final double DistanceSensorThreshold = 0;
-
-        public static final double ampAng = 25;
-        public static final double speakerAng = 0;
-        public static final double ExtendedAngle = 50;
-        public static final double EncoderOffset = 0;
-
-    }
-
-    public interface Shooter{
-
-        public static final int aID = 13,bID = 14;
-		public static final double MaxSpeed = 1.00;//percent
-        
-    }
-
-    public interface Climber{
-
-        public static final double minPressure = 60, maxPressure = 120;
-
-    }
     public interface Motion {
             public static final double translationKP = 0.02, translationKI = 0, translationKD = 0;
             public static final double rotationKP = 0.02, rotationKI = 0, rotationKD = 0;
